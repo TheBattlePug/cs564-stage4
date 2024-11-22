@@ -48,6 +48,8 @@ const Status createHeapFile(const string fileName)
     dataPage->init(dataPageNo);
 
     // Update header page with first and last page numbers
+    cout << "first page is hdr page: " << dataPageNo << endl;
+
     hdrPage->firstPage = dataPageNo;
     hdrPage->lastPage = dataPageNo;
 
@@ -77,6 +79,8 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     {
 		headerPageNo = 1; // first we need to get the header page (always assumed to be page No 1)
         returnStatus= bufMgr->readPage(filePtr, headerPageNo, curPage);
+        headerPage = reinterpret_cast<FileHdrPage*>(curPage);
+        
 
         if (returnStatus != OK) {
             cerr << "HeapFile: Failed to read header page for file " << fileName << endl;
@@ -409,8 +413,7 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
         // will never fit on a page, so don't even bother looking
         return INVALIDRECLEN;
     }
-  
-      
+
     // If no current page, read the last page into the buffer
     if (curPage == nullptr) {
         curPageNo = headerPage->lastPage;
@@ -419,7 +422,6 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
             cerr << "Error in reading the last page.\n";
             return status;
         }
-        curDirtyFlag = false;
     }
 
     // Try to insert the record into the current page
@@ -427,12 +429,16 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     if (status == NOSPACE) {
         // Current page is full, create a new page
         status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+
         if (status != OK) {
+            cerr << status << endl;
             cerr << "Error in allocating new page.\n";
             return status;
         }
 
         // Initialize the new page
+        bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+
         newPage->init(newPageNo);
         curPageNo = newPageNo;
         curPage = newPage;
@@ -444,7 +450,9 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
             cerr << "Error linking new page to the file.\n";
             return status;
         }
+
         headerPage->lastPage = newPageNo;
+        headerPage->pageCnt += 1;
         hdrDirtyFlag = true;
 
         // Try inserting the record into the new page

@@ -68,12 +68,15 @@ int main(int argc, char **argv)
     cout << "Start an insert scan which will have the side effect of opening dummy.02 " << endl;
     iScan = new InsertFileScan("dummy.02", status);
     for(i = 0; i < num; i++) {
-        sprintf(rec1.s, "This is record %05d", i);
+        sprintf(rec1.s, "This is record %05d", i);     
+
         rec1.i = i;
         rec1.f = i;
 
         dbrec1.data = &rec1;
         dbrec1.length = sizeof(RECORD);
+        
+        //cout << "inserting record " << i << " into this mother ..." << endl;
         status = iScan->insertRecord(dbrec1, newRid);
 
 		// stash away rid and key of the record
