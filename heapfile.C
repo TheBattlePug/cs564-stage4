@@ -80,7 +80,7 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 		headerPageNo = 1; // first we need to get the header page (always assumed to be page No 1)
         returnStatus= bufMgr->readPage(filePtr, headerPageNo, curPage);
         headerPage = reinterpret_cast<FileHdrPage*>(curPage);
-        
+        hdrDirtyFlag = false; //we didn't edit this yet (why should we);
 
         if (returnStatus != OK) {
             cerr << "HeapFile: Failed to read header page for file " << fileName << endl;
@@ -89,11 +89,18 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
         }
         
         // Initialize member variables
-        curPage = nullptr;
-        curPageNo = 0;
-        curDirtyFlag = false;
-        hdrDirtyFlag = false;
+        returnStatus = bufMgr->readPage(filePtr, headerPage->firstPage, pagePtr);
+        if(returnStatus != OK)
+        {
+            cerr << "HeapFile: Failed to get the first page the file " << fileName << endl;
+            db.closeFile(filePtr); // Clean up
+            return;
+        }
 
+        curPage = pagePtr;
+        curPageNo = headerPage->firstPage;
+        curDirtyFlag = false; //didn't change yet
+        
         returnStatus = OK;
         return;
     }
@@ -257,7 +264,6 @@ const Status HeapFileScan::resetScan()
     return OK;
 }
 
-
 const Status HeapFileScan::scanNext(RID& outRid)
 {
     Status 	status = OK;
@@ -268,7 +274,8 @@ const Status HeapFileScan::scanNext(RID& outRid)
 
     while(true)
     {
-        status = curPage->nextRecord(tmpRid, nextRid);
+        status = curPage->nextRecord(curRec, nextRid);
+
         if (status == ENDOFPAGE) {
             // Move to the next page if available
             status = curPage->getNextPage(nextPageNo);
@@ -285,11 +292,18 @@ const Status HeapFileScan::scanNext(RID& outRid)
             curRec = RID();
             continue;
         }	
+
         if (status != OK) return status;
         // Apply filter if defined
-        status = curPage->getRecord(outRid, rec);
+
+        status = getRecord(rec);
         if (status != OK) return status;
-        if (matchRec(rec)) return OK;
+
+        if (matchRec(rec)) 
+        {
+            outRid = curRec;
+            return OK;
+        }
     }
 }
 
@@ -299,6 +313,11 @@ const Status HeapFileScan::scanNext(RID& outRid)
 
 const Status HeapFileScan::getRecord(Record & rec)
 {
+    Status status;
+
+    cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
+   
+
     return curPage->getRecord(curRec, rec);
 }
 
